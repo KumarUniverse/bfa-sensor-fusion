@@ -3,7 +3,7 @@ import lib.constants.*
 
 function [data, params] = read(test_name, same_sps, correct_axes, convert_to_rads, apply_gyro_bias)
     %{
-    Reads raw test data from a given CSV and returns a MATLAB table.
+    Reads raw test data from a given CSV and returns a Pandas DataFrame.
     This method does NOT filter data or apply biases, only returning the readings for each sensor.
     %}
     switch nargin  % used in place of default function parameters
@@ -36,7 +36,7 @@ function [data, params] = read(test_name, same_sps, correct_axes, convert_to_rad
     csvp_id = fopen(csv_file_path + "p", 'r');
     
     % create params array
-    % Matlab advises against dynamically growing an array for performance reasons. May need to change.
+    % Matlab advises against dynamically growing an array for performance re. May need to change.
     params = [];
     tline = fgetl(csvp_id);
     while ischar(tline)
@@ -166,7 +166,7 @@ function [data, params] = read(test_name, same_sps, correct_axes, convert_to_rad
     % fill null mag values with previous value
     data = fillmissing(data, 'previous');
     
-    % if enabled, remove every 10th row to create 96sps data (downsampling)
+    % if enabled, remove every 10th row to create 96sps data
     if same_sps
         data(10:10:end,:) = [];
         params(8) = params(8) / 10;

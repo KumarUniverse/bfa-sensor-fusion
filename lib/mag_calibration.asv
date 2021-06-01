@@ -1,0 +1,27 @@
+% sqrtm - matrix square root
+
+function [M, n, d] = ellipsoid_fit(s)
+    %{
+    Calculates ellipsoid parameters to normalize magnetometer data.
+    %}
+    M = 0;
+    n = 0;
+    d = 0;
+    
+    return;
+end
+
+function cal_mag_data = calibrate(mag_data, M, n, d)
+    return;
+end
+
+function res = private_calibrate_row(row, A_1, b)
+    res = []
+    return;
+end
+
+function a = mymean(v,n)
+% MYMEAN Local function that calculates mean of array.
+
+    a = sum(v)/n;
+end
