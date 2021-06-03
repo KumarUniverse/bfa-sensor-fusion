@@ -1,4 +1,3 @@
-% sqrtm - matrix square root
 
 % function t = transpose_table(input_table)
 %     % A function used to transpose a MATLAB table.
@@ -80,6 +79,7 @@ function cal_mag_data = calibrate(mag_data, M, n, d)
     % h_m = A @ h + b where h = A^-1 @ (h_m - b)
     M_1 = inv(M);
     b = dot(M_1, n);
+    % sqrtm - matrix square root
     A_1 = real(1 / sqrt(dot(n.T, dot(M_1, n)) - d) * sqrtm(M));
     
     % apply calibration to mag samples and return calibrated data.
