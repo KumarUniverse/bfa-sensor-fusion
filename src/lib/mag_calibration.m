@@ -85,7 +85,7 @@ function cal_mag_data = calibrate(mag_data, M, n, d)
     % apply calibration to mag samples and return calibrated data.
     % Concern: Not sure if this is equivalent to pandas.apply().
     % original Python code: mag_data.apply(__calibrate_row, args=(A_1, b), axis=1, result_type='expand')
-    cal_mag_data = varfun(private_calibrate_row, mag_data, A_1, b);
+    cal_mag_data = rowfun(private_calibrate_row, mag_data, A_1, b);
 
     return;
 end
