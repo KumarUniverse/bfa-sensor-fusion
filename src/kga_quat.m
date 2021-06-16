@@ -90,7 +90,7 @@ disp('Converting to Euler angles...');
 ANGLES = ['Yaw', 'Pitch', 'Roll'];
 
 % TODO: Convert Python code to MATLAB
-lg_angles = varfun(@(x) x.yaw_pitch_roll, lg_q); % did not convert to array
+lg_angles = varfun(@(x) x.yaw_pitch_roll, lg_q); % did not convert lg_angles to array
 lg_angles.Properties.VariableNames = ANGLES;
 lg_angles = varfun(@(x) x * RAD_TO_DEG, lg_angles);
 lg_angles('Time') = data('Time'); % May need to convert to array before assignment.
@@ -151,18 +151,19 @@ function lg_q_accelmag = cal_lg_q_accelmag(row)
 
     % create normalized acceleration vector
     acc = table2array(row(ACC_COLS));
-    acc = acc / normalize(acc);
+    acc = acc / norm(acc);
     
     % create normalized magnetometer vector
     mag = table2array(row(MAG_COLS));
-    mag = mag / normalize(mag);
+    mag = mag / norm(mag);
     
     % calculate acceleration quat
     acc_args = num2cell(acc);
     q_acc = calc_q_acc(acc_args{:});
     
     % rotate mag vector into intermediate frame
-    l_mag = quatrotate(quatinv(q_acc), mag); % need to use XIO quat lib
+    l_mag = quaternProd(quaternProd(q_acc, mag), quaternConj(q_acc / norm(q_acc)));
+    % l_mag = quatrotate(quatinv(q_acc), mag); % need to remove
     
     % calculate mag quat
     lmag_args = num2cell(l_mag); % convert quat array to cell array
@@ -182,14 +183,16 @@ function lg_q = calc_lg_q(row)
     The acceleration vector should be normalized before being passed into this function.
     %}
 
+    global lg_q_prev
+
     % create normalized acceleration vector
     acc = table2array(row(ACC_COLS));
-    acc_mag = normalize(acc);
+    acc_mag = acc / norm(acc);
     acc = acc / acc_mag;
     
     % create normalized magnetometer vector
     mag = table2array(row(MAG_COLS));
-    mag = mag / normalize(mag);
+    mag = mag / norm(mag);
     
     % create gyro vector and remove current bias
     gyro = table2array(row(GYRO_COLS));
@@ -215,7 +218,8 @@ function lg_q = calc_lg_q(row)
     lg_q_w = calc_q_w(gyro_args{:});
     
     % rotate acc vector into frame
-    g_pred = 0; % need to use XIO quat library
+    g_pred = quaternProd(quaternProd(lg_q_w, acc), quaternConj(lg_q_w / norm(lg_q_w)));
+    %g_pred = quaternRotate(quaternInv(lg_q_w), acc);
     
     % calculate acceleration quat
     g_pred_args = num2cell(g_pred);
@@ -228,7 +232,7 @@ function lg_q = calc_lg_q(row)
     lg_q_prime = lg_q_w * q_acc_adj;
     
     % rotate mag vector into intermediate frame
-    l_mag = 0; % need to use XIO quat library
+    l_mag = quaternProd(quaternProd(lg_q_prime, mag), quaternConj(lg_q_prime / norm(lg_q_prime)));
     
     % calculate mag quat
     l_mag_args = num2cell(l_mag);
@@ -237,7 +241,7 @@ function lg_q = calc_lg_q(row)
     % TODO: LERP/SLERP q_mag
     q_mag_adj = scale_quat(alpha, q_mag);
     
-    % combin quats (Equation 13)
+    % combine quats (Equation 13)
     lg_q_prev = lg_q_prime * q_mag_adj;
     
     % only return q_mag if selected
@@ -268,7 +272,7 @@ function qacc = calc_q_acc(ax, ay, az)
         q3 = ax / sqrt(2*(1 - az));
     end
 
-    qacc = 0; % need to use XIO quat library
+    qacc = [q0 q1 q2 q3];
     
     return;
 end
@@ -289,11 +293,11 @@ function qmag = calc_q_mag(mx, my, mz)
         q0 = sqrt(L + mx*sqrt(L)) / sqrt(2*L);
         q3 = my / (sqrt(2) * sqrt(L + mx*sqrt(L)));
     else
-        q0 = my / (sqrt(2) * sqrt(L - mx*sqrt(L)));;
+        q0 = my / (sqrt(2) * sqrt(L - mx*sqrt(L)));
         q3 = sqrt(L - mx*sqrt(L)) / sqrt(2*L);
     end
 
-    qmag = 0; % need to use XIO quat library
+    qmag = [q0 q1 q2 q3];
     
     return;
 end
@@ -302,7 +306,7 @@ function qw = calc_q_w(wx, wy, wz)
     % Calculates the quaternion representing gyroscope data, `q_w` (Equation 42).
     
     % calculate delta gyro quaternion
-    w_quat = 0; % need to use XIO quat library
+    w_quat = [0 wx wy wz];
     dq_w = (-1/2) * w_quat * lg_q_prev;
     
     % add delta gyro quat to previous orientation
@@ -368,6 +372,18 @@ end
 function update_gyro_bias(acc_mag, w)
     % Calculates new gyro bias if the module is in a steady state.
     % This fn alters global variables.
+    
+    global w_bias
+    global w_prev
+    
+    w_args = num2cell(w);
+    if is_steady_state(acc_mag, w_args{:})
+        w_bias = BIAS_ALPHA * (w - w_bias);
+        disp(['Module at rest, updating gyro bias: ' w_bias]);
+    end
+    
+    % update previous gyro calculation
+    w_prev = w;
 end
 
 function squat = scale_quat(gain, quat)
@@ -375,7 +391,27 @@ function squat = scale_quat(gain, quat)
     Scales the given quaternion by an interpolation with the identity quaternion.
     Uses LERP or SLERP depending on the angle between the quaternion and identity quaternion.
     %}
-    squat = 0;
+    
+    [q0, q1, q2, q3] = deal(0,0,0,0);
+    
+    % LERP (to be more efficient):
+    if quat(1) > 0.9
+        q0 = (1 - gain) + gain * quat(1);
+        q1 = gain * quat(2);
+        q2 = gain * quat(3);
+        q3 = gain * quat(4);
+    else % SLERP
+        angle = acos(quat(1));
+        A = sin(angle * (1 - gain)) / sin(angle);
+        B = sin(angle * gain) / sin(angle);
+        
+        q0 = A + B * quat(1);
+        q1 = B * quat(2);
+        q2 = B * quat(3);
+        q3 = B * quat(4);
+    end
+    
+    squat = [q0 q1 q2 q3];
     return;
 end
 
