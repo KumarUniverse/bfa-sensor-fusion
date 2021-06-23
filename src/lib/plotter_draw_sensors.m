@@ -3,13 +3,13 @@
 % angle sequence known as 'Gimbal lock'.  This issue does not exist for a
 % quaternion or rotation matrix representation.
 
-addpath('../quaternion_library');  % include quaternion library
+addpath('src/quaternion_library');  % include quaternion library
 % Import and plot sensor data
 % addpath("../Sensor Fusion/data");
 % addpath("../Data Sets");
-addpath("../data");
+addpath('data');
 
-function draw_sensors(TEST_NAME)
+function plotter_draw_sensors(TEST_NAME)
     % Reads the sensor data from a file and plots the
     % graphs of the sensor readings for each sensor.
     % TEST_NAME is the name of the data file.

@@ -8,7 +8,7 @@
 %     return;
 % end
 
-function [M, n, d] = ellipsoid_fit(s)
+function [M, n, d] = magcal_ellipsoid_fit(s)
     %{
     Calculates ellipsoid parameters to normalize magnetometer data.
     
