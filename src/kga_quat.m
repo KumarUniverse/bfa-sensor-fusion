@@ -1,9 +1,11 @@
 % Keeping a Good Attitude (KGA) Algorithm
-import lib.constants.*
-import lib.csv_reader
-import lib.mag_calibration
-import lib.plotter
-addpath('quaternion_library');  % include quaternion library
+addpath('src/lib'); % KGA library
+addpath('src/quaternion_library');  % include quaternion library
+load('constants.mat')
+% import lib.constants.*
+% import lib.csv_reader.*
+% import lib.mag_calibration.*
+% import lib.plotter.*
 
 %======================================
 
@@ -42,9 +44,10 @@ disp('KGA algorithm started.');
 disp(['Reading test ', TEST_NAME, '...']);
 
 % read test data at 96 samples/second and convert gyro data to rads
-[data, params] = csv_reader.read(TEST_NAME, 'same_sps', true, ...
-    'correct_axes', CORRECT_MAG_AXES, 'convert_to_rads', true, ...
-    'apply_gyro_bias', true);
+% [data, params] = read(TEST_NAME, 'same_sps', true, ...
+%     'correct_axes', CORRECT_MAG_AXES, 'convert_to_rads', true, ...
+%     'apply_gyro_bias', true);
+[data, params] = csv_reader(TEST_NAME, true, CORRECT_MAG_AXES, true, true);
 
 % normalized cutoff frequency = cutpff frequency / (2 * sample rate)
 ORDER = 10;
@@ -59,11 +62,11 @@ disp('Test read');
 % TODO: is this needed?
 if CALIBRATE_MAG
     disp('Calibrating magnetometer data...');
-    
+
     if USE_PRECALC_MAG
-        data(MAG_COLS) = mag_calibration.calibrate(data(MAG_COLS), M, n, d);
+        data(:,MAG_COLS) = magcal_calibrate(data(:,MAG_COLS), M, n, d);
     else
-        data(MAG_COLS) = mag_calibration.calibrate(data(MAG_COLS));
+        data(:,MAG_COLS) = magcal_calibrate(data(:,MAG_COLS));
     end
     
     disp('Magnetometer calibration complete.');
@@ -103,7 +106,7 @@ end
 disp('Euler angles calculated.');
 
 % Line 394 of kga_quat.py: is this needed?
-plotter.draw_sensors('ea_kga');
+plotter.draw_euler_angles_xio('ea_kga');
 
 disp('Saving Euler angles to ''out/ea_kga.csv''...');
 writetable(lg_angles(['Roll', 'Pitch', 'Yaw']), 'out/ea_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
@@ -116,15 +119,19 @@ lg_quat_arr.to_csv("out/quat_kga.csv", index=False, header=False);
 writetable(lg_quat_arr, 'out/quat_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
 disp('Done.');
 
+% TODO: Convert this Python code to MATLAB.
+% This is a way to view the results in 3D instead
+% of just roll/pitch/yaw graphs.
 disp('Loading orientation view...');
 
-% TODO: Convert this Python code to MATLAB.
-% Q: What does this code do?
-% root = os.path.dirname(os.path.abspath(__file__))
-% bin_path = os.path.join(root, "../bin")
-% file_path = os.path.join(root, "../out/quat_kga.csv")
-% 
+[root, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
+bin_path = fullfile(root, '../bin');
+file_path = fullfile(root, '../out/quat_kga.csv');
+
+system(['cd ' bin_path ' && ' 'orientation_view ' '-sps ' '96 ' '-file ' file_path]);
+% % is the above line equivalent to the Python code below?
 % subprocess.run(["orientation_view", "-sps", "96", "-file", file_path], cwd=bin_path, shell=True)
+% Note: system() starts a new shell process.
 
 %===========================================
 % BEGIN KGA ALGORITHM FUNCTIONS (9 in total)
