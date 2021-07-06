@@ -1,7 +1,7 @@
 ACC_COLS = {'AccelX', 'AccelY', 'AccelZ'};
 GYRO_COLS = {'GyroX', 'GyroY', 'GyroZ'};
 MAG_COLS = {'MagX', 'MagY', 'MagZ'};
-AXES = cat(1, ACC_COLS, GYRO_COLS, MAG_COLS); %[ACC_COLS ; GYRO_COLS ; MAG_COLS];
+AXES = cat(2, ACC_COLS, GYRO_COLS, MAG_COLS); %[ACC_COLS ; GYRO_COLS ; MAG_COLS];
 
 GRAVITY = 9.80665;
 

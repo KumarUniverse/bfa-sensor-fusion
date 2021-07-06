@@ -15,12 +15,13 @@ function [M, n, d] = magcal_ellipsoid_fit(s)
     From: https://teslabs.com/articles/magnetometer-calibration/
     %}
     % D (samples)
-    D = [s(1)^2., s(2)^2., s(3)^2., ...
-         2.*s(2)*s(3), 2.*s(1)*s(3), 2.*s(1)*s(2), ...
-         2.*s(1), 2.*s(2), 2.*s(3), ones(size(s(1)))];
+    D = [s(1,:).^2.; s(2,:).^2.; s(3,:).^2.; ...
+         2.*s(2,:).*s(3,:); 2.*s(1,:).*s(3,:); 2.*s(1,:).*s(2,:); ...
+         2.*s(1,:); 2.*s(2,:); 2.*s(3,:); ones(size(s(1,:)))];
     
     % S, S_11, S_12, S_21, S_22 (eq. 11)
-    S = dot(D, D');
+    S = D * D.'; % Not the same as dot(D, D.');
+
     S_11 = S(1:6, 1:6);
     S_12 = S(1:6, 7:end);
     S_21 = S(7:end, 1:6);
@@ -35,17 +36,32 @@ function [M, n, d] = magcal_ellipsoid_fit(s)
           0  0  0  0  0 -4];
      
     % v_1 (eq. 15, solution)
-    E = dot(inv(C), S_11 - dot(S_12, dot(inv(S_22), S_21)));
+    %E = dot(inv(C), S_11 - dot(S_12, dot(inv(S_22), S_21)));
+    E = inv(C) * (S_11 - (S_12 * (inv(S_22) * S_21)));
+
+    % E_v - a diagonal matrix of eigenvalues of E.
+    % E_w - a matrix whose columns are the corresponding
+    % right eigenvectors.
+    [E_v, E_w] = eig(E);
+    E_w = diag(E_w); % convert diagonal matrix to vector
+
+%     disp('E_w'); % remove after debugging. CORRECT
+%     disp(E_w);
+%     disp('E_v');
+%     disp(E_v);
     
-    [E_w, E_v] = eig(E);
-    
-    v_1 = E_v(1:end, max(E_w));
-    if v_1(0) < 0
+    [~,argmax] = max(E_w);
+    v_1 = E_v(:, argmax);
+    if v_1(1) < 0
         v_1 = -v_1;
     end
+%     disp('v_1'); % remove after debugging. CORRECT
+%     disp(v_1);
+%     disp('end v_1');
     
     % v_2 (eq. 13, solution)
-    v_2 = dot(dot(-inv(S_22), S_21), v_1);
+    %v_2 = dot(dot(-inv(S_22), S_21), v_1);
+    v_2 = (-inv(S_22) * S_21) * v_1;
     
     % quadric-form parameters
     M = [v_1(1) v_1(4) v_1(5); ...

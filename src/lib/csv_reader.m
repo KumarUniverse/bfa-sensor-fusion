@@ -4,7 +4,7 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     Reads raw test data from a given CSV and returns a MATLAB table.
     This method does NOT filter data or apply biases, only returning the readings for each sensor.
     %}
-    addpath('src/lib')
+    addpath('src/lib');
     %import lib.constants.*
     load('constants.mat');
     
@@ -64,7 +64,8 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     len_data = height(data);
     %disp(len_data); % 46740
     %disp(sample_rate); % 960
-    time_col = array2table(transpose(0:1/sample_rate:(len_data-1)/sample_rate));
+    time_col = array2table(transpose(0:1/sample_rate:len_data/sample_rate));
+    time_col(1,:) = []; % delete the first column of the time data
     time_col.Properties.VariableNames = {'Time'};
     % insert time column to the beginning of the data table
     %disp(size(time_col)); % 46740 x 1 remove after debugging
@@ -73,6 +74,7 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     
     % sign data
     var_names = data.Properties.VariableNames;
+    sign_data = @(x) x - 65535*sign(max(0, x-32767));
     data = varfun(@(x) sign_data(x), data); % variable*scalar_fn
     data.Properties.VariableNames = var_names;
 
@@ -127,8 +129,8 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
 
     % if selected, manipulate axes to align mag with accel/gyro axes
     if correct_axes
-        data = movevars(data, 'MagY', 'After', 'MagX');
-        data = movevars(data, 'MagX', 'After', 'GyroY');
+        data = movevars(data, 'MagX', 'After', 'MagY');
+        %data = movevars(data, 'MagX', 'After', 'GyroY'); % not needed?
         data(:, 'MagZ') = array2table(-table2array(data(:,'MagZ')));
     end
     
@@ -164,13 +166,15 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     return;
 end
 
-function y = sign_data(x)
-    % signs the raw unsigned data.
-    if x > 32767
-        y = x-65535;
-    else
-        y = x;
-    end
-
-    return;
-end
+% Calling this function from within the csv_reader() function
+% seems to have no effect on the data. So ignore this.
+% function y = sign_data(x)
+%     % signs the raw unsigned data.
+%     if x > 32767
+%         y = x-65535;
+%     else
+%         y = x;
+%     end
+% 
+%     return;
+% end
