@@ -1,5 +1,5 @@
 
-function cal_mag_data = magcal_calibrate(mag_data, M, n, d)
+function cal_mag_data = magcal_calibrate(mag_data, M, n, d, first, last)
     %{
     Returns a calibrated set of magnetometer samples.
 

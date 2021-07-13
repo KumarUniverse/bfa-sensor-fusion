@@ -19,6 +19,8 @@ USE_PRECALC_MAG = false; % uses hard-coded mag calibration parameters
 CORRECT_MAG_AXES = true; % re-aligns mag axes to match accel/gyro axes (needed for MPU-9250 data)
 NORM_HEADING = true;     % normalizes yaw in euler angles graph (cosmetic, does not affect calculations)
 
+%DEBUG_LEVEL = 2; % for debugging, displays more detailed data graphs.
+
 % KGA complementary filter parameters:
 global GAIN BIAS_ALPHA GYRO_THRESHOLD ACC_THRESHOLD ...
     DELTA_GYRO_THRESHOLD USE_ADAPTIVE_GAIN UPDATE_GYRO_BIAS;
@@ -49,23 +51,39 @@ disp('KGA algorithm started.');
 disp(['Reading test ', TEST_NAME, '...']);
 
 % read test data at 96 samples/second and convert gyro data to rads
-% [data, params] = read(TEST_NAME, 'same_sps', true, ...
-%     'correct_axes', CORRECT_MAG_AXES, 'convert_to_rads', true, ...
-%     'apply_gyro_bias', true);
 [data, params] = csv_reader(TEST_NAME, true, CORRECT_MAG_AXES, true, true);
-% disp('First 10 lines of sensor data:'); % remove after debugging
-% disp(data(1:10,:)); % this is correct
+% disp('First 5 lines of processed sensor data:'); % remove after debugging
+% disp(data(1:5,:)); % this is correct
 
-ORDER = 10;
-CUTOFF_FREQ = 50;
-SAMPLE_RATE = 960;
-NORM_CUTOFF_FREQ = CUTOFF_FREQ / (2 * SAMPLE_RATE);
+if strcmp(APPLY_SMOOTHING,'BUTTER') == 1
+    % Butterworth filter parameters (somewhat arbitrary, but not being used)
+    ORDER = 10;
+    CUTOFF_FREQ = 50;
+    SAMPLE_RATE = 960;
+    NORM_CUTOFF_FREQ = CUTOFF_FREQ / (2 * SAMPLE_RATE);
+    
+    % Butterworth filter
+    num_coeffs, denom_coeffs = butter(ORDER, NORM_CUTOFF_FREQ);
+    for axis = constants.ACC_COLS
+        curr_axis = cell2mat(axis);
+        data(curr_axis) = filter(num_coeffs, deno_coeffs, table2array(data(:,curr_axis)));
+    end
+elseif strcmp(APPLY_SMOOTHING, 'SMA') == 1
+    % simple moving average
+    temp = movmean(table2array(data(:,constants.ACC_COLS)),[25 24]);
+    temp = array2table(temp);
+    temp(isnan(temp)) = data(25,constants.ACC_COLS);
+    data(:,constants.ACC_COLS) = temp;
+    temp = movmean(table2array(data(:,constants.MAG_COLS)),[25 24]);
+    temp = array2table(temp);
+    temp(isnan(temp)) = data(25,constants.MAG_COLS);
+    data(:,constants.MAG_COLS) = temp;
+end
 
 % Note: Smoothing is not applied to the acc data.
 
 disp('Test read.');
 
-% TODO: is this needed?
 if CALIBRATE_MAG
     disp('Calibrating magnetometer data...');
 
@@ -79,7 +97,6 @@ if CALIBRATE_MAG
 end
 
 % DEBUG code not included
-% Moved lines 164-176 to here:
 ANGLES = {'Yaw', 'Pitch', 'Roll'};
 
 global lg_q_prev w_prev w_bias;
@@ -101,14 +118,9 @@ lg_q_prev = calc_lg_q_accelmag(data(1,:)); % previous orientation quat
 disp('Initial orientation calculated.');
 disp('Calculating orientations w/ gyro data...');
 
-% lg_q_first_row = calc_lg_q(data(1,2:end)); % REMOVE after debugging
-% disp('lg_q_first_row');
-% disp(lg_q_first_row);
 lg_q = rowfun(@calc_lg_q, data(:,2:end));
-%lg_q = array2table(table2array(lg_q)); % split into multiple columns
-%^^may not be needed
-%disp('lg_q'); % remove after debugging
-%disp(lg_q(1:5,:)); % this seems to be wrong
+% disp('lg_q'); % glimpse first 5 lines of lg_q (remove after debugging)
+% disp(lg_q(1:5,:)); % this seems to be wrong
 
 disp('Orientations calculated.');
 disp('Converting to Euler angles...');
@@ -119,63 +131,50 @@ lg_angles = rowfun(@(x) x * constants.RAD_TO_DEG, lg_angles);
 lg_angles = array2table(table2array(lg_angles)); % split the columns
 lg_angles.Properties.VariableNames = ANGLES;
 lg_angles(:,'Time') = data(:,'Time'); % May need to convert to array before assignment.
+% disp('lg_angles'); % remove after debugging
+% disp(lg_angles(1:5,:));
 
 if NORM_HEADING
     heading_offset = mean(table2array(head(lg_angles(:,'Yaw'), 48)));
-    %heading_offset % 53.4963. In Python: 54.5323
+    %heading_offset % MATLAB: 53.4963. In Python: 54.5323
     lg_angles(:,'Yaw') = rowfun(@(x) x - heading_offset, lg_angles(:,'Yaw'));
 end
 
-% disp('lg_angles'); % remove after debugging
+% disp('lg_angles after applying norm heading:'); % remove after debugging
 % disp(lg_angles(1:5,:));
 
 disp('Euler angles calculated.');
 
-% Line 394 of kga_quat.py: is this needed?
-% ===================== UNCOMMENT THIS ===========================
-% plotter.draw_euler_angles_xio('ea_kga');
-% 
-% disp('Saving Euler angles to ''out/ea_kga.csv''...');
-% writetable(lg_angles(['Roll', 'Pitch', 'Yaw']), 'out/ea_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
-% disp('Done.');
-% 
-% disp('Saving quats to ''out/quat_kga.csv''...');
-% lg_quat_arr = varfun(@(x) x.elements, lg_q); % did not convert to array
-% lg_quat_arr.Properties.VariableNames = ['w','x','y','z'];
-% lg_quat_arr.to_csv('out/quat_kga.csv', index=False, header=False);
-% writetable(lg_quat_arr, 'out/quat_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
-% disp('Done.');
-% 
-% % TODO: Convert this Python code to MATLAB.
-% % This is a way to view the results in 3D instead
-% % of just roll/pitch/yaw graphs.
-% disp('Loading orientation view...');
-% 
-% [root, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
-% bin_path = fullfile(root, '../bin');
-% file_path = fullfile(root, '../out/quat_kga.csv');
-% 
-% system(['cd ' bin_path ' && ' 'orientation_view ' '-sps ' '96 ' '-file ' file_path]);
-% ===================== UNCOMMENT THIS ===========================
+% plot the roll, pitch and yaw angles of each sensor
+plotter_draw_sensors(data);
+
+% plot the attitude (roll, pitch and yaw) of the IMU.
+plotter_draw_euler_angles_xio(data);
+%plotter_draw_euler_angles_kga(data); % alternative to the above line
+%(^^only works in MATLAB, not Octave)
+
+disp('Saving Euler angles to ''out/ea_kga.csv''...');
+writetable(lg_angles(:,{'Roll', 'Pitch', 'Yaw'}), 'out/ea_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
+disp('Done.');
+
+disp('Saving quats to ''out/quat_kga.csv''...');
+lg_quat_arr = array2table(table2array(lg_q)); % split into multiple columns
+lg_quat_arr.Properties.VariableNames = {'w','x','y','z'};
+writetable(lg_quat_arr, 'out/quat_kga.csv', 'WriteRowNames', false, 'WriteVariableNames', false);
+disp('Done.');
+
+disp('Loading orientation view...');
+
+[root, ~, ~] = fileparts(matlab.desktop.editor.getActiveFilename);
+bin_path = fullfile(root, '../bin');
+file_path = fullfile(root, '../out/quat_kga.csv');
+
+system(['cd ' bin_path ' && ' 'orientation_view ' '-sps ' '96 ' '-file ' file_path]);
 % Note: system() starts a new shell process to execute the command.
 
 %===========================================
 % BEGIN KGA ALGORITHM FUNCTIONS (9 in total)
 %===========================================
-
-% global lg_q_prev w_prev w_bias; % may not be needed
-
-% % previous orientation quat
-% lg_q_prev = NaN;
-
-% % previous gyro vector
-% w_prev = [0, 0, 0];
-% 
-% % current gyro bias
-% w_bias = [0, 0, 0];
-% disp('w_bias');
-% disp(w_bias);
-% disp('after w_bias');
 
 function lg_q_accelmag = calc_lg_q_accelmag(row)
     %{
@@ -202,8 +201,9 @@ function lg_q_accelmag = calc_lg_q_accelmag(row)
     
     % rotate mag vector into intermediate frame
     quad_mag = cat(2, 0.0, mag);
-    l_mag = quaternProd(quaternProd(quaternConj(q_acc / norm(q_acc)), quad_mag), q_acc);
-    % l_mag = quatrotate(quatinv(q_acc), mag); % need to remove
+    %l_mag = quatrotate(quatinv(q_acc), mag); % need to remove
+    l_mag = quaternProd(quaternProd(quaternConj(q_acc / norm(q_acc)), ...
+        quad_mag), q_acc);
     
     % convert l_mag from quat to Euler
     %l_mag_euler = quatern2euler(l_mag / norm(l_mag)); % this is wrong
@@ -229,12 +229,12 @@ function lg_q = calc_lg_q(varargin)
 
     global constants lg_q_prev w_bias ...
         GAIN UPDATE_GYRO_BIAS USE_ADAPTIVE_GAIN;
-    row = cell2table(varargin); % (UNCOMMENT after debugging!)
+    row = cell2table(varargin);
     row.Properties.VariableNames = constants.AXES;
 
     % create normalized acceleration vector
     acc = table2array(row(:,constants.ACC_COLS));
-    acc_mag = norm(acc); % this is WRONG: acc / norm(acc);
+    acc_mag = norm(acc);
     acc = acc / acc_mag;
     acc = cat(2, 0.0, acc); % make acc a quaternion
     
@@ -248,67 +248,69 @@ function lg_q = calc_lg_q(varargin)
 
     % update gyro bias calculation
     if UPDATE_GYRO_BIAS
-        %acc_mag
-        %gyro
         update_gyro_bias(acc_mag, gyro);
     end
 
     % correct for gyro bias
+    % w_bias % MATLAB: [0,0,0], Python: [0,0,0]
     gyro = gyro - w_bias;
-%     disp('gyro after correcting gyro bias'); % remove after debugging
-%     disp(gyro);
     
     % calculate adaptive gain from acc if selected
     alpha = GAIN;
-    if USE_ADAPTIVE_GAIN % (UNCOMMENT after debugging!)
+    if USE_ADAPTIVE_GAIN
         alpha = calc_gain(GAIN, acc_mag);
     end
     
     % calculate gyro quaternion
     gyro_args = num2cell(gyro);
-    lg_q_w = calc_q_w(gyro_args{:}); % (UNCOMMENT after debugging!)
-    %lg_q_w = [0 1 2 3]; % remove after debugging
+    lg_q_w = calc_q_w(gyro_args{:});
     
     % rotate acc vector into frame
-    g_pred = quaternProd(quaternProd(lg_q_w, acc), quaternConj(lg_q_w / norm(lg_q_w)));
-
+%     g_pred = quaternProd(quaternProd(lg_q_w, acc), ...
+%         quaternConj(lg_q_w / norm(lg_q_w))); % need to remove
+    g_pred = quaternProd(quaternProd(...
+        quaternConj(lg_q_w / norm(lg_q_w)), acc), lg_q_w);
     
     % convert g_pred from quaternion to Euler angles
     g_pred_euler = g_pred(2:end);
     %g_pred_euler
     g_pred_args = num2cell(g_pred_euler);
     % calculate acceleration quat
-    q_acc = calc_q_acc(g_pred_args{:}); % (UNCOMMENT after debugging!)
-    %q_acc = [0 1 2 3]; % remove after debugging
+    q_acc = calc_q_acc(g_pred_args{:});
     
     % TODO: LERP/SLERP q_acc
     q_acc_adj = scale_quat(alpha, q_acc);
     
     % calculate intermediate quat
     lg_q_prime = quaternProd(lg_q_w, q_acc_adj);
-    %lg_q_prime = lg_q_w * q_acc_adj; % not needed (incorrect)
     
     % rotate mag vector into intermediate frame
-    l_mag = quaternProd(quaternProd(lg_q_prime, mag), ...
-        quaternConj(lg_q_prime / norm(lg_q_prime)));
+%     l_mag = quaternProd(quaternProd(lg_q_prime, mag), ...
+%         quaternConj(lg_q_prime / norm(lg_q_prime))); % need to remove
+    l_mag = quaternProd(quaternProd(...
+        quaternConj(lg_q_prime / norm(lg_q_prime)), mag), lg_q_prime);
     
     % convert l_mag from quat to Euler
     l_mag_euler = l_mag(2:end);
     %l_mag_euler
     l_mag_args = num2cell(l_mag_euler);
     % calculate mag quat
-    q_mag = calc_q_mag(l_mag_args{:}); % (UNCOMMENT after debugging!)
-    %q_mag = [0 1 2 3]; % remove after debugging
+    q_mag = calc_q_mag(l_mag_args{:});
     
     % TODO: LERP/SLERP q_mag
-    q_mag_adj = scale_quat(alpha, q_mag); % (UNCOMMENT after debugging!)
-    %q_mag_adj = q_mag; % remove after debugging
+    q_mag_adj = scale_quat(alpha, q_mag);
     
     % combine quats (Equation 13)
     lg_q_prev = quaternProd(lg_q_prime, q_mag_adj);
     %lg_q_prev = lg_q_prime * q_mag_adj; % not needed (incorrect)
     
     lg_q = lg_q_prev;
+%     alpha
+%     acc
+%     mag
+%     gyro
+%     lg_q_w
+%     g_pred
     
     return;
 end

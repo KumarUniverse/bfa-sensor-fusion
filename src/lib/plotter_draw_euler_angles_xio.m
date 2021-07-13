@@ -1,18 +1,19 @@
 
-function plotter_draw_euler_angles_xio(TEST_NAME)
+function plotter_draw_euler_angles_xio(data)
     % Plot the Euler angles (yaw, pitch, roll) using the
     % X-IO toolbox to calculate orientation.
     % TEST_NAME is the name of the data file.
     addpath('src/quaternion_library');  % include quaternion library
+    addpath('src/AHRS');
     addpath('data');
     
-    data = readmatrix(TEST_NAME);
-    data = data(1:10:end,:);
+    %data = readmatrix(TEST_NAME);
+    %data = data(1:10:end,:);
 
-    Accelerometer = data(:,2:4);
-    Gyroscope = data(:,5:7);
-    Magnetometer = data(:,8:10);
-    time = data(:,1);
+    Accelerometer = table2array(data(:,2:4));
+    Gyroscope = table2array(data(:,5:7));
+    Magnetometer = table2array(data(:,8:10));
+    time = table2array(data(:,1));
     
     % ["Madgwick", "Mahony", "MagMahony"]
     FILTER_TYPE = "Madgwick";
@@ -27,13 +28,13 @@ function plotter_draw_euler_angles_xio(TEST_NAME)
             AHRS = MagMahonyAHRS('SamplePeriod', 1/96, 'Kp', 0.5);
     end
 
-    quaternion = zeros(length(time), 4);
-    for t = 1:length(time)
+    quaternion = zeros(height(time), 4);
+    for t = 1:height(time)
         AHRS.Update(Gyroscope(t,:) * (pi/180), Accelerometer(t,:), Magnetometer(t,:));	% gyroscope units must be radians
         quaternion(t, :) = AHRS.Quaternion;
     end
 
-    writematrix(quaternion, "out/quat_xio.csv")
+    writematrix(quaternion, 'out/quat_xio.csv');
     
     % Plot algorithm output as Euler angles
     % The first and third Euler angles in the sequence (phi and psi) become

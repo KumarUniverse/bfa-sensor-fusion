@@ -5,7 +5,6 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     This method does NOT filter data or apply biases, only returning the readings for each sensor.
     %}
     addpath('src/lib');
-    %import lib.constants.*
     load('constants.mat');
     
     switch nargin  % used in place of default function parameters
@@ -43,18 +42,18 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     tline = fgetl(csvp_id);
     while ischar(tline)
         params(end+1) = (str2double(tline));  % appending to array can be expensive
-        % params(end+1) = (str2double(['uint8(',tline,')'])); % probably not needed
         tline = fgetl(csvp_id);
     end
     fclose(csvp_id);
     
     % read data from CSV
     % For some reason, MATLAB automatically excludes the first row.
+    % So need to explicitly tell it to include the first row.
     opts = detectImportOptions(csv_file_path);
     opts.VariableNamesLine = 0; % 0 means don't import variable names
+    opts.DataLines = [1 Inf]; % read the data from the first row
     opts.VariableNames = AXES;
     data = readtable(csv_file_path, opts);
-    %data.Properties.VariableNames = AXES;
     %disp(data(1:10,:)); % glimpse the data
     %disp(size(data));
     
@@ -62,14 +61,14 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     
     % add time axis to dataset
     len_data = height(data);
-    %disp(len_data); % 46740
+    %disp(len_data); % 46741
     %disp(sample_rate); % 960
     time_col = array2table(transpose(0:1/sample_rate:len_data/sample_rate));
-    time_col(1,:) = []; % delete the first column of the time data
+    time_col(end,:) = []; % delete the last row of the time col
     time_col.Properties.VariableNames = {'Time'};
+    %disp(size(time_col)); % 46741 x 1
+    %disp(size(data)); % 46741 x 9
     % insert time column to the beginning of the data table
-    %disp(size(time_col)); % 46740 x 1 remove after debugging
-    %disp(size(data)); % 46740 x 9 remove after debugging
     data = [time_col data]; % ERROR: All tables being horizontally concatenated must have the same number of rows.
     
     % sign data
@@ -130,20 +129,10 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     % if selected, manipulate axes to align mag with accel/gyro axes
     if correct_axes
         data = movevars(data, 'MagX', 'After', 'MagY');
-        %data = movevars(data, 'MagX', 'After', 'GyroY'); % not needed?
         data(:, 'MagZ') = array2table(-table2array(data(:,'MagZ')));
     end
-    
-%     FIXME: experimental mag modifications, very very incorrect
-%     new_mag_data = data[MAG_COLS]
-%     new_mag_data["MagX"] = -data["MagZ"]
-%     new_mag_data["MagY"] = data["MagX"]
-%     new_mag_data["MagZ"] = -data["MagY"]
-%     data[MAG_COLS] = new_mag_data
-%     data[MAG_COLS] = data[MAG_COLS].values[::-1]
 
-    % reorder axes so that mag columns are in X-Y-Z order
-    %data = data('Time' + AXES);
+    % reorder mag axes column names so that mag columns are in X-Y-Z order
     data.Properties.VariableNames{'MagY'} = 'temp';
     data.Properties.VariableNames{'MagX'} = 'MagY';
     data.Properties.VariableNames{'temp'} = 'MagX';
@@ -154,14 +143,13 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     % if enabled, only include every 10th row
     % to create 96sps data (downsampling)
     if same_sps
-        data = data(10:10:end,:);
+        data = data(1:10:end,:);
         params(8) = params(8) / 10;
     end
     
-    % for some reason, the first mag data point is always erroneous,
-    % so remove its row
-    % Not needed since the first row is automatically excluded by MATLAB.
-    %data(1,:) = [];
+    % for some reason, the first mag data point is
+    % always erroneous, so remove its row
+    data(1,:) = [];
     
     return;
 end
