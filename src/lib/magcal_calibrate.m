@@ -10,8 +10,20 @@ function cal_mag_data = magcal_calibrate(mag_data, M, n, d, first, last)
     addpath('src/lib'); % KGA library
     
     % calculate ellipsoid parameters if not passed in
-    if nargin == 1  % if only 1 arg is passed to the function
+    if nargin == 1
         [M, n, d] = magcal_ellipsoid_fit(table2array(mag_data).');
+    elseif nargin == 4 && (isnan(M) || isnan(n) || isnan(d))
+        [M, n, d] = magcal_ellipsoid_fit(table2array(mag_data).');
+    elseif nargin == 6 && (isnan(M) || isnan(n) || isnan(d))
+        if isnan(first)
+            first = 1;
+        end
+        if isnan(last)
+            last = height(mag_data);
+        end
+        mag_data_clipped = mag_data(first:last,:);
+        disp(head(mag_data_clipped, 5));
+        [M, n, d] = magcal_ellipsoid_fit(table2array(mag_data_clipped).');
     end
     
     % display M, n, and d
@@ -21,6 +33,8 @@ function cal_mag_data = magcal_calibrate(mag_data, M, n, d, first, last)
     disp(n);
     disp('d');
     disp(d);
+    % display mag_data
+    disp(head(mag_data, 5));
     
     % calculate calibration parameters for:
     % h_m = A @ h + b where h = A^-1 @ (h_m - b)
@@ -29,14 +43,6 @@ function cal_mag_data = magcal_calibrate(mag_data, M, n, d, first, last)
     b = -(M_1 * n);
     % sqrtm - matrix square root
     A_1 = real(1 / sqrt((n.' * (M_1 * n)) - d) * sqrtm(M));
-    %A_1 = real(1 / sqrt(dot(n.', (M_1 * n), 2) - d) * sqrtm(M));
-    % remove after debugging:
-%     disp('A_1');
-%     disp(A_1);
-%     disp('b');
-%     disp(b);
-%     disp('sqrtm(M)');
-%     disp(sqrtm(M));
     
     % apply calibration to mag samples and return calibrated data.
     % Concern: Not sure if this is equivalent to pandas.apply().

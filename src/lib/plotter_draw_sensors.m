@@ -6,19 +6,15 @@
 function plotter_draw_sensors(data)
     % Reads the sensor data from a file and plots the
     % graphs of the sensor readings for each sensor.
-    % TEST_NAME is the name of the data file.
-    % Eg: TEST_NAME = "euler_angles_2_calibrated";
     addpath('src/quaternion_library');  % include quaternion library
     addpath('data');
-    
-    %data = readmatrix(TEST_NAME);
-    %data = data(1:10:end,:); % downsampling.
 
     % Categorize the data into their respective sensor data.
-    Accelerometer = table2array(data(:,2:4));
-    Gyroscope = table2array(data(:,5:7));
-    Magnetometer = table2array(data(:,8:10));
-    time = table2array(data(:,1));
+    data = table2array(data);
+    Accelerometer = data(:,2:4);
+    Gyroscope = data(:,5:7);
+    Magnetometer = data(:,8:10);
+    time = data(:,1);
 
     figure('Name', 'Sensor Data');
 

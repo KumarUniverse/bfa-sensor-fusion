@@ -1,19 +1,15 @@
 
-function plotter_draw_euler_angles_xio(data)
+function plotter_draw_euler_angles_xio(data, HIDE_ROLL)
     % Plot the Euler angles (yaw, pitch, roll) using the
     % X-IO toolbox to calculate orientation.
-    % TEST_NAME is the name of the data file.
     addpath('src/quaternion_library');  % include quaternion library
     addpath('src/AHRS');
-    addpath('data');
-    
-    %data = readmatrix(TEST_NAME);
-    %data = data(1:10:end,:);
 
-    Accelerometer = table2array(data(:,2:4));
-    Gyroscope = table2array(data(:,5:7));
-    Magnetometer = table2array(data(:,8:10));
-    time = table2array(data(:,1));
+    data = table2array(data);
+    Accelerometer = data(:,2:4);
+    Gyroscope = data(:,5:7);
+    Magnetometer = data(:,8:10);
+    time = data(:,1);
     
     % ["Madgwick", "Mahony", "MagMahony"]
     FILTER_TYPE = "Madgwick";
@@ -35,24 +31,25 @@ function plotter_draw_euler_angles_xio(data)
     end
 
     writematrix(quaternion, 'out/quat_xio.csv');
-    
-    % Plot algorithm output as Euler angles
-    % The first and third Euler angles in the sequence (phi and psi) become
-    % unreliable when the middle angles of the sequence (theta) approaches �90
-    % degrees. This problem commonly referred to as Gimbal Lock.
-    % See: http://en.wikipedia.org/wiki/Gimbal_lock
 
-    euler = quatern2euler(quaternConj(quaternion)) * (180/pi);	% use conjugate for sensor frame relative to Earth and convert to degrees.
+    % Use conjugate for sensor frame relative to Earth and convert to degrees.
+    euler_matrix = quatern2euler(quaternConj(quaternion)) * (180/pi);
 
-    figure('Name', 'Euler Angles');
+    figure('Name', 'Euler Angles (XIO)');
     hold on;
-    plot(time, euler(:,1), 'r'); % phi or yaw
-    plot(time, euler(:,2), 'g'); % theta or pitch
-    plot(time, euler(:,3), 'b'); % psi or roll
-    title('Euler angles');
+    plot(time, euler_matrix(:,3), 'r'); % phi or yaw
+    plot(time, euler_matrix(:,2), 'g'); % theta or pitch
+    if not(HIDE_ROLL) % if true, don't graph roll
+        plot(time, euler_matrix(:,1), 'b'); % psi or roll
+    end
+    title('Euler angles (XIO)');
     xlabel('Time (s)');
     ylabel('Angle (deg)');
-    legend('\phi', '\theta', '\psi');
+    if HIDE_ROLL % if true, don't graph roll
+        legend('\phi', '\theta');
+    else
+        legend('\phi', '\theta', '\psi');
+    end
     hold off;
 end
 

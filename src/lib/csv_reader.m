@@ -48,7 +48,7 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     
     % read data from CSV
     % For some reason, MATLAB automatically excludes the first row.
-    % So need to explicitly tell it to include the first row.
+    % So need to explicitly tell it to include the first row using options.
     opts = detectImportOptions(csv_file_path);
     opts.VariableNamesLine = 0; % 0 means don't import variable names
     opts.DataLines = [1 Inf]; % read the data from the first row
@@ -63,32 +63,25 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     len_data = height(data);
     %disp(len_data); % 46741
     %disp(sample_rate); % 960
-    time_col = array2table(transpose(0:1/sample_rate:len_data/sample_rate));
-    time_col(end,:) = []; % delete the last row of the time col
+    time_col = array2table(transpose(linspace(0,len_data/sample_rate, len_data)));
     time_col.Properties.VariableNames = {'Time'};
     %disp(size(time_col)); % 46741 x 1
     %disp(size(data)); % 46741 x 9
     % insert time column to the beginning of the data table
-    data = [time_col data]; % ERROR: All tables being horizontally concatenated must have the same number of rows.
+    data = [time_col data];
     
     % sign data
-    var_names = data.Properties.VariableNames;
+    var_names = data.Properties.VariableNames; % used to preserve col names
     sign_data = @(x) x - 65535*sign(max(0, x-32767));
     data = varfun(@(x) sign_data(x), data); % variable*scalar_fn
     data.Properties.VariableNames = var_names;
 
     % apply accel sensitivity
     acc_sens = params(10);
-    
-    apply_accel_sens = @(x) x * acc_sens * GRAVITY / 32768; %apply_accel_sens_decorator(acc_sens, GRAVITY);
+    apply_accel_sens = @(x) x * acc_sens * GRAVITY / 32768;
     var_names = data.Properties.VariableNames;
     data(:,ACC_COLS) = varfun(apply_accel_sens, data(:,ACC_COLS));
     data.Properties.VariableNames = var_names;
-    
-    % invert Y and Z for accel and gyro
-    % TODO: not sure if this is necessary
-    % data[["AccelY", "AccelZ"]] = -data[["AccelY", "AccelZ"]]
-    % data[["GyroY", "GyroZ"]] = -data[["GyroY", "GyroZ"]]
     
     % calculate conversion factor if selected
     GYRO_UNITS = 0;
@@ -100,30 +93,30 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     
     % apply gyro sensitivity
     gyro_sens = params(11);
-    
-    apply_gyro_sens = @(x) x * gyro_sens * GYRO_UNITS / 32768; %apply_gyro_sens_decorator(GYRO_UNITS, gyro_sens);
+    apply_gyro_sens = @(x) x * gyro_sens * GYRO_UNITS / 32768;
     var_names = data.Properties.VariableNames;
     data(:,GYRO_COLS) = varfun(apply_gyro_sens, data(:,GYRO_COLS));
     data.Properties.VariableNames = var_names;
     
     % apply mag sensitivity
     mag_sens = 4800;
-    
-    apply_mag_sens = @(x) x * mag_sens / 32768; %apply_mag_sens_decorator(mag_sens);
+    apply_mag_sens = @(x) x * mag_sens / 32768;
     var_names = data.Properties.VariableNames;
     data(:,MAG_COLS) = varfun(apply_mag_sens, data(:,MAG_COLS));
     data.Properties.VariableNames = var_names;
     
-    % calculate gyro bias using first 0.5s of data.
-    data_head = head(data, 480);
-    gyro_offsets = mean(table2array(data_head(:,GYRO_COLS)), 'omitnan');
-
-    % apply offsets to gyroscope (remove sensor bias)
-    for i = 1:size(GYRO_COLS, 2)
-        axis = GYRO_COLS(i);
-        var_names = data.Properties.VariableNames;
-        data(:,axis) = varfun(@(x) x - gyro_offsets(i), data(:,axis));
-        data.Properties.VariableNames = var_names;
+    % if selected, calculate gyro bias using first 0.5s of data.
+    if apply_gyro_bias
+        data_head = head(data, 480);
+        gyro_offsets = mean(table2array(data_head(:,GYRO_COLS)), 'omitnan');
+        
+        % apply offsets to gyroscope (remove sensor bias)
+        for i = 1:size(GYRO_COLS, 2)
+            axis = GYRO_COLS(i);
+            var_names = data.Properties.VariableNames;
+            data(:,axis) = varfun(@(x) x - gyro_offsets(i), data(:,axis));
+            data.Properties.VariableNames = var_names;
+        end
     end
 
     % if selected, manipulate axes to align mag with accel/gyro axes
@@ -140,7 +133,7 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     % fill null mag values with previous value
     data = fillmissing(data, 'previous');
     
-    % if enabled, only include every 10th row
+    % if enabled, only keep every 10th row
     % to create 96sps data (downsampling)
     if same_sps
         data = data(1:10:end,:);
@@ -153,16 +146,3 @@ function [data, params] = csv_reader(test_name, same_sps, correct_axes, convert_
     
     return;
 end
-
-% Calling this function from within the csv_reader() function
-% seems to have no effect on the data. So ignore this.
-% function y = sign_data(x)
-%     % signs the raw unsigned data.
-%     if x > 32767
-%         y = x-65535;
-%     else
-%         y = x;
-%     end
-% 
-%     return;
-% end
